@@ -1,0 +1,410 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La margherita</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #080f20;
+    color: #e9edf5;
+    font-family: "Courier New", monospace;
+    overflow: hidden;
+}
+
+main {
+    width: min(96vw, 560px);
+    text-align: center;
+    padding: 15px 0;
+}
+
+#messaggio {
+    min-height: 32px;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: #f1d889;
+    transition: opacity 0.2s;
+}
+
+canvas {
+    display: block;
+    width: min(94vw, 500px);
+    height: auto;
+    margin: auto;
+    image-rendering: pixelated;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+#istruzioni {
+    margin-top: 8px;
+    color: #8290a9;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+
+button {
+    margin-top: 18px;
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid #52627e;
+    color: #e9edf5;
+    font-family: inherit;
+    letter-spacing: 2px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #18243b;
+}
+
+/* Schermata finale */
+
+#finale {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(5, 11, 25, 0.88);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.8s ease;
+}
+
+#finale.visibile {
+    opacity: 1;
+    visibility: visible;
+}
+
+#testoFinale {
+    max-width: 900px;
+    color: #f3d987;
+    font-size: clamp(38px, 10vw, 100px);
+    line-height: 1.12;
+    letter-spacing: 3px;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 0 0 18px rgba(243, 217, 135, 0.25);
+    transform: scale(0.65);
+    opacity: 0;
+    transition: transform 0.9s cubic-bezier(.2,.8,.2,1),
+                opacity 0.9s ease;
+}
+
+#finale.visibile #testoFinale {
+    transform: scale(1);
+    opacity: 1;
+}
+
+</style>
+</head>
+
+<body>
+
+<main>
+    <div id="messaggio">Stacca il primo petalo</div>
+
+    <canvas id="fiore" width="400" height="480"></canvas>
+
+    <div id="istruzioni">CLICCA SUI PETALI UNO ALLA VOLTA</div>
+
+    <button id="ricomincia">RICOMINCIA</button>
+</main>
+
+<div id="finale">
+    <div id="testoFinale">YOUR GF<br>LOVES YOU</div>
+</div>
+
+<script>
+const canvas = document.getElementById("fiore");
+const ctx = canvas.getContext("2d");
+
+const messaggio = document.getElementById("messaggio");
+const finale = document.getElementById("finale");
+const istruzioni = document.getElementById("istruzioni");
+
+const LARGHEZZA = 400;
+const ALTEZZA = 480;
+
+const CX = 200;
+const CY = 165;
+
+const NUM_PETALI = 12;
+const PIXEL = 5;
+const ANGOLO_PETALO = Math.PI * 2 / NUM_PETALI;
+
+let petali = [];
+let petaliCaduti = [];
+let conteggio = 0;
+let giocoFinito = false;
+
+// ---------- GRAFICA ----------
+
+function rettangolo(x, y, w, h, colore) {
+    ctx.fillStyle = colore;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+function disegnaSfondo() {
+    ctx.fillStyle = "#080f20";
+    ctx.fillRect(0, 0, LARGHEZZA, ALTEZZA);
+
+    const stelle = [
+        [30, 40], [85, 90], [340, 45],
+        [365, 140], [40, 230], [350, 270],
+        [75, 370], [315, 420], [145, 30],
+        [260, 75], [20, 420], [380, 365],
+        [105, 190], [300, 190], [245, 350]
+    ];
+
+    stelle.forEach(([x, y], i) => {
+        rettangolo(
+            x, y, 3, 3,
+            i % 2 === 0 ? "#a0aec5" : "#526783"
+        );
+    });
+}
+
+// ---------- GAMBO ----------
+
+function disegnaGambo() {
+    rettangolo(194, 190, 12, 205, "#376b4b");
+    rettangolo(198, 190, 4, 205, "#68966b");
+
+    // Foglia sinistra
+    rettangolo(151, 285, 18, 6, "#376b4b");
+    rettangolo(160, 276, 25, 9, "#4e8659");
+    rettangolo(174, 267, 20, 9, "#4e8659");
+    rettangolo(164, 285, 18, 6, "#68966b");
+
+    // Foglia destra
+    rettangolo(207, 325, 18, 6, "#376b4b");
+    rettangolo(218, 316, 25, 9, "#4e8659");
+    rettangolo(232, 307, 20, 9, "#4e8659");
+    rettangolo(218, 325, 18, 6, "#68966b");
+}
+
+// ---------- PETALI ----------
+
+function disegnaFormaPetalo() {
+    const larghezze = [
+        2, 4, 6, 8,
+        9, 10, 10, 9,
+        8, 6, 4, 2
+    ];
+
+    larghezze.forEach((larghezza, riga) => {
+        for (let colonna = 0; colonna < larghezza; colonna++) {
+            const x = (colonna - (larghezza - 1) / 2) * PIXEL;
+            const y = -104 + riga * PIXEL;
+
+            rettangolo(x, y, PIXEL, PIXEL, "#f2f0e5");
+        }
+    });
+
+    rettangolo(-12, -72, 5, 5, "#d4ddd9");
+    rettangolo(7, -67, 5, 5, "#d4ddd9");
+}
+
+function disegnaPetalo(indice) {
+    const angolo = indice * ANGOLO_PETALO;
+
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.rotate(angolo);
+    disegnaFormaPetalo();
+    ctx.restore();
+}
+
+// ---------- CENTRO GIALLO PIÙ PICCOLO ----------
+
+function disegnaCentro() {
+    // Bordo esterno: circa 46 pixel di diametro
+    rettangolo(-22, -18, 44, 36, "#a66d2c");
+    rettangolo(-18, -22, 36, 44, "#a66d2c");
+
+    // Centro dorato
+    rettangolo(-18, -16, 36, 32, "#e7b94e");
+    rettangolo(-16, -18, 32, 36, "#e7b94e");
+
+    // Parte luminosa
+    rettangolo(-14, -12, 28, 24, "#f4d675");
+    rettangolo(-12, -14, 24, 28, "#f4d675");
+
+    // Dettagli pixel
+    rettangolo(-9, -9, 5, 5, "#ffe99f");
+    rettangolo(6, -6, 5, 5, "#d69b3e");
+    rettangolo(-5, 6, 5, 5, "#d69b3e");
+    rettangolo(6, 6, 5, 5, "#ffe99f");
+    rettangolo(-12, 3, 5, 5, "#d69b3e");
+}
+
+function disegnaFiore() {
+    for (let i = 0; i < NUM_PETALI; i++) {
+        if (petali[i]) {
+            disegnaPetalo(i);
+        }
+    }
+
+    ctx.save();
+    ctx.translate(CX, CY);
+    disegnaCentro();
+    ctx.restore();
+}
+
+// ---------- PETALI CADUTI ----------
+
+function disegnaPetaliCaduti() {
+    petaliCaduti.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotazione);
+        disegnaFormaPetalo();
+        ctx.restore();
+    });
+}
+
+// ---------- DISEGNO ----------
+
+function disegna() {
+    disegnaSfondo();
+    disegnaGambo();
+    disegnaFiore();
+    disegnaPetaliCaduti();
+}
+
+// ---------- ANIMAZIONE ----------
+
+function aggiornaAnimazione() {
+    petaliCaduti.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12;
+        p.rotazione += p.velocitaRotazione;
+        p.alpha -= 0.009;
+    });
+
+    petaliCaduti = petaliCaduti.filter(p => p.alpha > 0);
+
+    disegna();
+    requestAnimationFrame(aggiornaAnimazione);
+}
+
+// ---------- FINE DEL GIOCO ----------
+
+function terminaGioco() {
+    giocoFinito = true;
+
+    messaggio.textContent = "";
+    istruzioni.textContent = "";
+
+    // Lascia il tempo all'ultimo petalo di cadere
+    setTimeout(() => {
+        finale.classList.add("visibile");
+    }, 700);
+}
+
+// ---------- STACCARE UN PETALO ----------
+
+function staccaPetalo(indice) {
+    if (!petali[indice] || giocoFinito) return;
+
+    petali[indice] = false;
+    conteggio++;
+
+    const angolo = indice * ANGOLO_PETALO;
+
+    petaliCaduti.push({
+        x: CX,
+        y: CY,
+        vx: Math.sin(angolo) * 1.5,
+        vy: -1.5,
+        rotazione: angolo,
+        velocitaRotazione: 0.035,
+        alpha: 1
+    });
+
+    if (conteggio === NUM_PETALI) {
+        terminaGioco();
+    } else if (conteggio % 2 === 1) {
+        messaggio.textContent = "TI AMA";
+    } else {
+        messaggio.textContent = "NON TI AMA";
+    }
+
+    disegna();
+}
+
+// ---------- CLIC SUI PETALI ----------
+
+canvas.addEventListener("click", function(event) {
+    if (giocoFinito) return;
+
+    const r = canvas.getBoundingClientRect();
+
+    const x = (event.clientX - r.left) / r.width * LARGHEZZA;
+    const y = (event.clientY - r.top) / r.height * ALTEZZA;
+
+    const dx = x - CX;
+    const dy = y - CY;
+
+    const distanza = Math.hypot(dx, dy);
+
+    if (distanza < 38 || distanza > 115) return;
+
+    let angolo = Math.atan2(dx, -dy);
+
+    if (angolo < 0) {
+        angolo += Math.PI * 2;
+    }
+
+    const indice = Math.round(
+        angolo / ANGOLO_PETALO
+    ) % NUM_PETALI;
+
+    staccaPetalo(indice);
+});
+
+// ---------- RICOMINCIARE ----------
+
+function ricomincia() {
+    petali = Array(NUM_PETALI).fill(true);
+    petaliCaduti = [];
+    conteggio = 0;
+    giocoFinito = false;
+
+    finale.classList.remove("visibile");
+
+    messaggio.textContent = "Stacca il primo petalo";
+    istruzioni.textContent = "CLICCA SUI PETALI UNO ALLA VOLTA";
+
+    disegna();
+}
+
+document
+    .getElementById("ricomincia")
+    .addEventListener("click", ricomincia);
+
+// ---------- AVVIO ----------
+
+ricomincia();
+aggiornaAnimazione();
+
+</script>
+</body>
+</html>
